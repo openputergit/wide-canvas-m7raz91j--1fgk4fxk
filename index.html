@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CalTrack AI - Smart Calorie Tracker</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen">
+        <nav class="bg-teal-600 text-white p-4">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-xl font-bold">CalTrack AI</h1>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm">Daily Calories: {{ totalDailyCalories }}/2000</span>
+                    <div class="w-32 bg-teal-700 rounded-full h-2">
+                        <div class="bg-white rounded-full h-2" :style="{ width: `${(totalDailyCalories/2000)*100}%` }"></div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="container mx-auto p-4">
+            <div class="max-w-md mx-auto">
+                <!-- Camera Input -->
+                <div class="mb-6">
+                    <div class="relative">
+                        <input type="file" 
+                               accept="image/*" 
+                               capture="environment"
+                               @change="handleImage"
+                               class="hidden" 
+                               ref="fileInput">
+                        <button @click="activateCamera" 
+                                class="w-full bg-teal-600 text-white rounded-lg p-4 flex items-center justify-center space-x-2 hover:bg-teal-700 transition">
+                            <i class="bi bi-camera text-xl"></i>
+                            <span>Take Food Photo</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div v-if="isLoading" class="text-center p-4">
+                    <div class="animate-pulse flex space-x-4">
+                        <div class="rounded-full bg-teal-400 h-12 w-12 mx-auto"></div>
+                    </div>
+                    <p class="mt-2 text-gray-600">Analyzing your food...</p>
+                </div>
+
+                <!-- Results -->
+                <div v-if="lastAnalysis" class="bg-white rounded-lg shadow p-4 mb-6">
+                    <h3 class="font-semibold text-lg mb-2">Analysis Results:</h3>
+                    <p class="text-gray-700">{{ lastAnalysis }}</p>
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Calories:</label>
+                        <div class="flex space-x-2">
+                            <input type="number" 
+                                   v-model="calories" 
+                                   class="border rounded p-2 w-24"
+                                   min="0">
+                            <button @click="addToDaily" 
+                                    class="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700">
+                                Add to Daily
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History -->
+                <div class="bg-white rounded-lg shadow">
+                    <h3 class="font-semibold text-lg p-4 border-b">Today's Food Log</h3>
+                    <div class="divide-y">
+                        <div v-for="(item, index) in foodLog" 
+                             :key="index"
+                             class="p-4 flex justify-between items-center">
+                            <div>
+                                <p class="font-medium">{{ item.description }}</p>
+                                <p class="text-sm text-gray-600">{{ item.calories }} calories</p>
+                            </div>
+                            <button @click="removeItem(index)" 
+                                    class="text-red-600 hover:text-red-800">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    isLoading: false,
+                    lastAnalysis: '',
+                    calories: 0,
+                    foodLog: [],
+                    totalDailyCalories: 0
+                }
+            },
+            methods: {
+                activateCamera() {
+                    this.$refs.fileInput.click();
+                },
+                async handleImage(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    this.isLoading = true;
+                    
+                    try {
+                        // First upload the image
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('userId', 'user123');
+                        formData.append('appSlug', 'caltrack-ai');
+
+                        const uploadResponse = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/storage/upload', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer xyHSqibldJYQbo7YDFdiT8zt0on1'
+                            },
+                            body: formData
+                        });
+
+                        const uploadResult = await uploadResponse.json();
+
+                        // Then analyze the image
+                        const aiResponse = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/ai', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer xyHSqibldJYQbo7YDFdiT8zt0on1',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                messages: [{
+                                    role: "user",
+                                    content: [
+                                        {
+                                            type: "text",
+                                            text: "What food item is in this image? Please provide the name and approximate calories."
+                                        },
+                                        {
+                                            type: "image_url",
+                                            image_url: {
+                                                url: uploadResult.url
+                                            }
+                                        }
+                                    ]
+                                }]
+                            })
+                        });
+
+                        const result = await aiResponse.json();
+                        this.lastAnalysis = result.message;
+                        
+                        // Extract calories from AI response (assuming it's in the format "... contains approximately X calories")
+                        const calorieMatch = result.message.match(/(\d+)\s*calories/i);
+                        if (calorieMatch) {
+                            this.calories = parseInt(calorieMatch[1]);
+                        }
+
+                    } catch (error) {
+                        console.error('Error:', error);
+                        this.lastAnalysis = 'Sorry, there was an error analyzing the image.';
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+                addToDaily() {
+                    if (this.calories > 0) {
+                        this.foodLog.push({
+                            description: this.lastAnalysis,
+                            calories: this.calories
+                        });
+                        this.updateTotalCalories();
+                        this.calories = 0;
+                    }
+                },
+                removeItem(index) {
+                    this.foodLog.splice(index, 1);
+                    this.updateTotalCalories();
+                },
+                updateTotalCalories() {
+                    this.totalDailyCalories = this.foodLog.reduce((sum, item) => sum + item.calories, 0);
+                }
+            },
+            mounted() {
+                // Load saved data from localStorage
+                const savedLog = localStorage.getItem('foodLog');
+                if (savedLog) {
+                    this.foodLog = JSON.parse(savedLog);
+                    this.updateTotalCalories();
+                }
+            },
+            watch: {
+                foodLog: {
+                    handler(newLog) {
+                        localStorage.setItem('foodLog', JSON.stringify(newLog));
+                    },
+                    deep: true
+                }
+            }
+        }).mount('#app')
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
